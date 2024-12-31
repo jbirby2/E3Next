@@ -592,7 +592,7 @@ namespace E3Core.Settings
         private void LoadData()
         {
             FileIniDataParser fileIniData = e3util.CreateIniParser();
-            IniData defaultIniData;
+            IniData defaultIniData = createNewINIData();
             bool areUnsavedChanges = false;
 
             _fileName = GetBoTFilePath($"{CharacterName}_{ServerName}.ini");
@@ -603,19 +603,12 @@ namespace E3Core.Settings
             
             if (!File.Exists(_fileName))
             {
-                defaultIniData = CreateSettings(_fileName);
-                ParsedData = defaultIniData;
+                ParsedData = createNewINIData();
+                areUnsavedChanges = true;
             }
             else
             {
                 ParsedData = fileIniData.ReadFile(_fileName);
-
-                if (ParsedData == null)
-                {
-                    throw new Exception("Could not load character settings file");
-                }
-
-                defaultIniData = createNewINIData();
                 if (_mergeUpdates && !ParsedData.ContainsAllSettingsFoundIn(defaultIniData))
                 {
                     // The existing file was missing some settings. Add them and save over it.
@@ -623,10 +616,7 @@ namespace E3Core.Settings
                     areUnsavedChanges = true;
                 }
             }
-            _fileLastModifiedFileName = _fileName;
-            _fileLastModified = File.GetLastWriteTime(_fileName);
-
-
+            
             LoadKeyData("CPU", "ProcessLoopDelayInMS", ParsedData, ref CPU_ProcessLoopDelay);
 			LoadKeyData("CPU", "PublishStateDataInMS", ParsedData, ref CPU_PublishStateDataInMS);
 			LoadKeyData("CPU", "PublishBuffDataInMS", ParsedData, ref CPU_PublishBuffDataInMS);
@@ -961,7 +951,8 @@ namespace E3Core.Settings
 			LoadKeyData("Charm", "PeelDebuffPerson", ParsedData, ref Charm_PeelDebuffPerson);
 			LoadKeyData("Charm", "PeelDebuffSpells", ParsedData, Charm_PeelDebuffSpells);
 
-            // Update the "unused setting" comments
+            // Update the "unused setting" comments.
+            // It's important that this happens AFTER Bard_MelodySets has been populated.
             var sectionsToLeaveUncommented = new List<string>() { "Ifs", "Events", "EventLoop", "EventRegMatches", "E3BotsPublishData (key/value)" };
             foreach (string melodyName in Bard_MelodySets.Keys)
             {
@@ -975,13 +966,23 @@ namespace E3Core.Settings
                 areUnsavedChanges = true;
             }
 
+            // Save file changes if necessary
             if (areUnsavedChanges)
             {
-                File.Delete(_fileName);
+                if (File.Exists(_fileName))
+                {
+                    File.Delete(_fileName);
+                }
+                if (!Directory.Exists(_configFolder + _settingsFolder))
+                {
+                    Directory.CreateDirectory(_configFolder + _settingsFolder);
+                }
                 fileIniData.WriteFile(_fileName, ParsedData);
-                _fileLastModifiedFileName = _fileName;
-                _fileLastModified = File.GetLastWriteTime(_fileName);
             }
+
+            _fileLastModifiedFileName = _fileName;
+            _fileLastModified = File.GetLastWriteTime(_fileName);
+
             // _log.Write($"Finished processing and loading: {fullPathToUse}");
         }
 
@@ -1358,7 +1359,6 @@ namespace E3Core.Settings
             {
                 File.Delete(fileName);
             }
-
             if (!Directory.Exists(_configFolder + _botFolder))
             {
                 Directory.CreateDirectory(_configFolder + _botFolder);
@@ -1367,6 +1367,7 @@ namespace E3Core.Settings
             FileIniDataParser parser = e3util.CreateIniParser();
             var newFile = createNewINIData();
             parser.WriteFile(fileName, newFile);
+            _fileName = fileName;
 
             return newFile;
         }
